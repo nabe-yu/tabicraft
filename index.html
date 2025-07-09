@@ -1,0 +1,448 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>TabiCraft - 旅程スケジューラー</title>
+  <meta name="description" content="旅程を自由にクラフトするウィークリーバーチカル型スケジューラー">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js" defer></script>
+</head>
+<body class="bg-gray-50 min-h-screen" x-data="tabicraftApp()">
+  <!-- ヘッダー -->
+  <header class="bg-white shadow sticky top-0 z-10 border-b border-gray-100">
+    <div class="max-w-7xl mx-auto px-4 py-4 flex items-center justify-between">
+      <h1 class="text-2xl font-bold text-gray-700">TabiCraft</h1>
+    </div>
+  </header>
+
+  <!-- メインコンテンツ -->
+  <main class="max-w-7xl mx-auto px-4 py-6">
+    <!-- 開始日選択 -->
+    <section class="mb-6">
+      <input type="date" class="border rounded px-2 py-1" x-model="startDate" @change="resetDays()">
+    </section>
+
+    <!-- スケジューラー -->
+    <section class="overflow-x-auto">
+      <div class="flex min-w-max border rounded-xl bg-white shadow-sm">
+        <!-- 時刻ラベル（左端固定） -->
+        <div class="w-12 flex-shrink-0 bg-gray-50 border-r border-gray-200">
+          <div class="h-12 bg-gray-100 border-b border-gray-200 flex items-center justify-center">
+            <span class="text-xs font-medium text-gray-700">時刻</span>
+          </div>
+          <template x-for="hour in 24" :key="hour">
+            <div class="h-6 border-b border-gray-100 text-xs text-gray-400 px-1 flex items-center justify-center" x-text="String(hour-1).padStart(2, '0') + ':00'"></div>
+          </template>
+        </div>
+        
+        <!-- 日付カラム群 -->
+        <div class="flex">
+          <template x-for="(day, dayIdx) in days" :key="day">
+            <div class="flex flex-col items-stretch">
+              <div class="w-60 border-l first:border-l-0 flex-shrink-0 bg-white">
+                <!-- 日付ヘッダー -->
+                <div class="bg-gray-50 px-3 py-2 flex items-center justify-between rounded-t-xl border-b border-gray-100">
+                  <span class="font-bold text-gray-700" x-text="formatDate(day)"></span>
+                  <button class="text-xs text-gray-400 hover:text-red-500 transition" @click="removeDay(dayIdx)" x-show="days.length > 1">✕</button>
+                </div>
+                
+                <!-- スケジュールエリア -->
+                <div class="relative h-[36rem] border-t border-gray-100">
+                  <!-- 時間ごとの水平線 -->
+                  <template x-for="hour in 24" :key="hour">
+                    <div class="absolute left-0 right-0 border-b border-gray-100" :style="`top: ${hour * 24}px;`"></div>
+                  </template>
+                  
+                  <!-- アクティビティ表示 -->
+                  <template x-for="(act, actIdx) in getActivities(day)" :key="act.id">
+                    <div class="absolute left-3 right-3 shadow-sm cursor-pointer border border-gray-200 bg-white hover:border-gray-400 transition"
+                      :style="activityStyle(act, day)"
+                      :class="categoryBgColor(act.category)"
+                      @click="editActivity(day, act)">
+                      <div class="flex justify-between items-center px-2 py-1">
+                        <div>
+                          <span class="font-semibold text-sm text-gray-800" x-text="act.title"></span>
+                          <span class="ml-1 text-xs text-gray-400" x-text="'['+act.category+']'"></span>
+                        </div>
+                      </div>
+                      <div class="text-xs text-gray-400 px-2 pb-1 whitespace-pre-line" x-text="act.startDate === act.endDate ? (act.startTime + '\n↓\n' + act.endTime) : (act.startDate + ' ' + act.startTime + '\n↓\n' + act.endDate + ' ' + act.endTime)"></div>
+                    </div>
+                  </template>
+                </div>
+              </div>
+              
+              <!-- アクティビティ追加ボタン -->
+              <button class="mt-2 mb-4 mx-auto px-3 py-1 bg-gray-100 text-gray-700 rounded-full text-xs shadow hover:bg-gray-200 transition border border-gray-200" @click="openAddActivity(day)">＋アクティビティ追加</button>
+            </div>
+          </template>
+          
+          <!-- 日付追加ボタン（垂直中央） -->
+          <div class="flex flex-col items-center justify-center w-16 h-full">
+            <button class="w-10 h-10 rounded-full bg-gray-100 text-gray-500 hover:bg-gray-200 hover:text-blue-500 border border-gray-200 shadow flex items-center justify-center text-2xl transition" @click="addDay" title="日付カラム追加">
+              ＋
+            </button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Markdown表示エリア -->
+    <section class="mt-8">
+      <label class="block mb-2 font-semibold">Markdown</label>
+      <div class="w-full border rounded p-2 font-mono text-xs h-32 bg-gray-50 overflow-y-auto whitespace-pre-wrap" x-text="generateMarkdown()"></div>
+    </section>
+
+    <!-- JSONエディタ -->
+    <section class="mt-4">
+      <label class="block mb-2 font-semibold">JSON（編集可）</label>
+      <textarea class="w-full border rounded p-2 font-mono text-xs h-40" x-model="jsonEditor" @change="updateFromEditor"></textarea>
+    </section>
+  </main>
+
+  <!-- アクティビティ追加・編集モーダル -->
+  <div x-show="showModal" class="fixed inset-0 bg-black bg-opacity-30 flex items-center justify-center z-50" style="display: none;" @click.self="closeModal">
+    <div class="bg-white rounded-lg shadow-lg p-6 w-80">
+      <form @submit.prevent="saveActivity">
+        <!-- タイトル -->
+        <div class="mb-2">
+          <label class="block text-sm">タイトル</label>
+          <input type="text" class="w-full border rounded px-2 py-1" x-model="modalData.title" required>
+        </div>
+        
+        <!-- 開始日時 -->
+        <div class="mb-2 flex gap-2">
+          <div class="flex-1">
+            <label class="block text-sm">開始日</label>
+            <input type="date" class="w-full border rounded px-2 py-1" x-model="modalData.startDate" required>
+          </div>
+          <div class="flex-1">
+            <label class="block text-sm">開始時刻</label>
+            <input type="time" class="w-full border rounded px-2 py-1" x-model="modalData.startTime" required>
+          </div>
+        </div>
+        
+        <!-- 終了日時 -->
+        <div class="mb-2 flex gap-2">
+          <div class="flex-1">
+            <label class="block text-sm">終了日</label>
+            <input type="date" class="w-full border rounded px-2 py-1" x-model="modalData.endDate" required>
+          </div>
+          <div class="flex-1">
+            <label class="block text-sm">終了時刻</label>
+            <input type="time" class="w-full border rounded px-2 py-1" x-model="modalData.endTime" required>
+          </div>
+        </div>
+        
+        <!-- カテゴリー -->
+        <div class="mb-4">
+          <label class="block text-sm">カテゴリー</label>
+          <select class="w-full border rounded px-2 py-1" x-model="modalData.category" required>
+            <option value="移動">移動</option>
+            <option value="宿泊">宿泊</option>
+            <option value="食事">食事</option>
+            <option value="行動">行動</option>
+          </select>
+        </div>
+        
+        <!-- ボタン群 -->
+        <div class="flex justify-between gap-2 mt-4">
+          <button type="button" class="px-3 py-1 bg-gray-300 rounded hover:bg-gray-400" @click="closeModal">キャンセル</button>
+          <template x-if="modalEdit">
+            <button type="button" class="px-3 py-1 bg-red-500 text-white rounded hover:bg-red-600" @click="deleteActivity(modalData.id)">削除</button>
+          </template>
+          <button type="submit" class="px-3 py-1 bg-blue-500 text-white rounded hover:bg-blue-600">保存</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- フッター -->
+  <footer class="bg-white border-t border-gray-100 mt-12">
+    <div class="max-w-7xl mx-auto px-4 py-6 text-center">
+      <p class="text-sm text-gray-500">
+        © 2025- nabe-yu
+      </p>
+    </div>
+  </footer>
+
+  <script>
+    /**
+     * TabiCraft メインアプリケーション
+     * ウィークリーバーチカル型スケジューラー
+     */
+    function tabicraftApp() {
+      return {
+        // データ状態
+        startDate: new Date().toISOString().slice(0,10),
+        days: [],
+        activities: [], // [{id, title, startDate, startTime, endDate, endTime, category}]
+        hoveredActivity: null,
+        showModal: false,
+        modalEdit: false,
+        modalData: { id: '', title: '', startDate: '', startTime: '', endDate: '', endTime: '', category: '移動' },
+        jsonEditor: '',
+        nextId: 1,
+
+        /**
+         * 初期化処理
+         */
+        init() {
+          this.loadFromURL();
+          if (this.days.length === 0) {
+            this.resetDays();
+          } else {
+            this.updateEditor();
+            this.saveToURL();
+          }
+        },
+
+        /**
+         * URLからデータを読み込み
+         */
+        loadFromURL() {
+          const urlParams = new URLSearchParams(window.location.search);
+          const dataParam = urlParams.get('data');
+          if (dataParam) {
+            try {
+              const jsonStr = decodeURIComponent(atob(dataParam));
+              const data = JSON.parse(jsonStr);
+              this.startDate = data.startDate || this.startDate;
+              this.days = data.days || [];
+              this.activities = data.activities || [];
+              this.nextId = data.nextId || 1;
+            } catch (e) {
+              console.warn('URLからのデータ読み込みに失敗しました:', e);
+            }
+          }
+        },
+
+        /**
+         * URLにデータを保存
+         */
+        saveToURL() {
+          const data = {
+            startDate: this.startDate,
+            days: this.days,
+            activities: this.activities,
+            nextId: this.nextId
+          };
+          const jsonStr = JSON.stringify(data);
+          const base64Data = btoa(encodeURIComponent(jsonStr));
+          const url = new URL(window.location);
+          url.searchParams.set('data', base64Data);
+          window.history.replaceState({}, '', url);
+        },
+
+        /**
+         * 日付をリセット
+         */
+        resetDays() {
+          this.days = [this.startDate];
+          this.activities = [];
+          this.updateEditor();
+          this.saveToURL();
+        },
+
+        /**
+         * 日付カラムを追加
+         */
+        addDay() {
+          const last = this.days[this.days.length-1];
+          const next = new Date(last);
+          next.setDate(next.getDate() + 1);
+          const nextStr = next.toISOString().slice(0,10);
+          this.days.push(nextStr);
+          this.updateEditor();
+          this.saveToURL();
+        },
+
+        /**
+         * 日付カラムを削除
+         */
+        removeDay(idx) {
+          this.days.splice(idx,1);
+          this.updateEditor();
+          this.saveToURL();
+        },
+
+        /**
+         * 日付をフォーマット
+         */
+        formatDate(date) {
+          const d = new Date(date);
+          return `${d.getMonth()+1}/${d.getDate()} (${['日','月','火','水','木','金','土'][d.getDay()]})`;
+        },
+
+        /**
+         * 指定日付カラムに表示すべきアクティビティを返す
+         */
+        getActivities(day) {
+          return this.activities.filter(act => {
+            return (act.startDate <= day && day <= act.endDate);
+          }).sort((a,b) => (a.startDate+a.startTime).localeCompare(b.startDate+b.startTime));
+        },
+
+        /**
+         * アクティビティ追加モーダルを開く
+         */
+        openAddActivity(day) {
+          this.modalEdit = false;
+          this.modalData = {
+            id: '',
+            title: '',
+            startDate: day,
+            startTime: '09:00',
+            endDate: day,
+            endTime: '10:00',
+            category: '移動'
+          };
+          this.showModal = true;
+        },
+
+        /**
+         * アクティビティ編集モーダルを開く
+         */
+        editActivity(day, act) {
+          this.modalEdit = true;
+          this.modalData = { ...act };
+          this.showModal = true;
+        },
+
+        /**
+         * アクティビティを保存
+         */
+        saveActivity() {
+          const data = { ...this.modalData };
+          
+          // バリデーション
+          if (!data.title || !data.startDate || !data.startTime || !data.endDate || !data.endTime) {
+            alert('すべての項目を入力してください');
+            return;
+          }
+          
+          if (data.startDate > data.endDate || (data.startDate === data.endDate && data.startTime >= data.endTime)) {
+            alert('終了日時は開始日時より後にしてください');
+            return;
+          }
+
+          if (this.modalEdit) {
+            // 編集
+            const idx = this.activities.findIndex(a => a.id === data.id);
+            if (idx !== -1) this.activities[idx] = data;
+          } else {
+            // 追加
+            data.id = 'a' + (this.nextId++);
+            this.activities.push(data);
+          }
+          
+          this.showModal = false;
+          this.updateEditor();
+          this.saveToURL();
+        },
+
+        /**
+         * アクティビティを削除
+         */
+        deleteActivity(id) {
+          if (confirm('このアクティビティを削除しますか？')) {
+            this.activities = this.activities.filter(a => a.id !== id);
+            this.showModal = false;
+            this.updateEditor();
+            this.saveToURL();
+          }
+        },
+
+        /**
+         * モーダルを閉じる
+         */
+        closeModal() {
+          this.showModal = false;
+        },
+
+        /**
+         * 指定日付カラムでのアクティビティの表示位置・高さを計算
+         */
+        activityStyle(act, day) {
+          let start = 0, end = 24*60;
+          
+          if (day === act.startDate) {
+            const [h, m] = act.startTime.split(":").map(Number);
+            start = h*60 + m;
+          }
+          if (day === act.endDate) {
+            const [h, m] = act.endTime.split(":").map(Number);
+            end = h*60 + m;
+          }
+          
+          const top = (start/60)*24; // 1h=24px
+          const height = Math.max(16, ((end-start)/60)*24);
+          return `top:${top}px;height:${height}px`;
+        },
+
+        /**
+         * カテゴリ別の背景色を取得
+         */
+        categoryBgColor(cat) {
+          return {
+            '移動': 'bg-blue-50',
+            '宿泊': 'bg-yellow-50',
+            '食事': 'bg-pink-50',
+            '行動': 'bg-green-50',
+          }[cat] || 'bg-gray-50';
+        },
+
+        /**
+         * JSONエディタを更新
+         */
+        updateEditor() {
+          this.jsonEditor = JSON.stringify({ 
+            startDate: this.startDate, 
+            days: this.days, 
+            activities: this.activities 
+          }, null, 2);
+        },
+
+        /**
+         * JSONエディタからデータを更新
+         */
+        updateFromEditor() {
+          try {
+            const data = JSON.parse(this.jsonEditor);
+            this.startDate = data.startDate;
+            this.days = data.days;
+            this.activities = data.activities;
+            this.saveToURL();
+          } catch (e) {
+            console.warn('JSONパースエラー:', e);
+          }
+        },
+
+        /**
+         * Markdownを生成
+         */
+        generateMarkdown() {
+          let md = `# 旅程\n`;
+          for (const day of this.days) {
+            md += `\n## ${this.formatDate(day)}\n`;
+            const acts = this.getActivities(day);
+            if (acts.length === 0) {
+              md += '- 予定なし\n';
+            } else {
+              for (const act of acts) {
+                md += `- ${act.startDate} ${act.startTime}〜${act.endDate} ${act.endTime} [${act.category}] ${act.title}\n`;
+              }
+            }
+          }
+          return md;
+        },
+      };
+    }
+
+    // Alpine.jsの初期化
+    document.addEventListener('alpine:init', () => {
+      Alpine.data('tabicraftApp', tabicraftApp);
+    });
+  </script>
+</body>
+</html> 
