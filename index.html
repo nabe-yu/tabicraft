@@ -48,25 +48,25 @@
                 </div>
                 
                 <!-- スケジュールエリア -->
-                <div class="relative h-[36rem] border-t border-gray-100">
+                <div class="relative h-[48rem] border-t border-gray-100">
                   <!-- 時間ごとの水平線 -->
                   <template x-for="hour in 24" :key="hour">
-                    <div class="absolute left-0 right-0 border-b border-gray-100" :style="`top: ${hour * 24}px;`"></div>
+                    <div class="absolute left-0 right-0 border-b border-gray-100" :style="`top: ${hour * 32}px;`"></div>
                   </template>
                   
                   <!-- アクティビティ表示 -->
                   <template x-for="(act, actIdx) in getActivities(day)" :key="act.id">
-                    <div class="absolute left-3 right-3 shadow-sm cursor-pointer border border-gray-200 bg-white hover:border-gray-400 transition"
+                    <div class="absolute left-3 right-3 shadow-sm cursor-pointer border border-gray-200 bg-white hover:border-gray-400 transition overflow-hidden"
                       :style="activityStyle(act, day)"
                       :class="categoryBgColor(act.category)"
                       @click="editActivity(day, act)">
-                      <div class="flex justify-between items-center px-2 py-1">
-                        <div>
-                          <span class="font-semibold text-sm text-gray-800" x-text="act.title"></span>
-                          <span class="ml-1 text-xs text-gray-400" x-text="'['+act.category+']'"></span>
+                      <div class="flex justify-between items-center px-2 py-1 min-h-[20px]">
+                        <div class="flex-1 min-w-0">
+                          <span class="font-semibold text-sm text-gray-800 truncate block" x-text="act.title"></span>
+                          <span class="text-xs text-gray-400" x-text="'['+act.category+']'"></span>
                         </div>
                       </div>
-                      <div class="text-xs text-gray-400 px-2 pb-1 whitespace-pre-line" x-text="act.startDate === act.endDate ? (act.startTime + '\n↓\n' + act.endTime) : (act.startDate + ' ' + act.startTime + '\n↓\n' + act.endDate + ' ' + act.endTime)"></div>
+                      <div class="text-xs text-gray-400 px-2 pb-1 whitespace-pre-line leading-tight" x-text="act.startDate === act.endDate ? (act.startTime + '\n↓\n' + act.endTime) : (act.startDate + ' ' + act.startTime + '\n↓\n' + act.endDate + ' ' + act.endTime)"></div>
                     </div>
                   </template>
                 </div>
@@ -278,9 +278,14 @@
          * 指定日付カラムに表示すべきアクティビティを返す
          */
         getActivities(day) {
+          if (!day || !this.activities) return [];
           return this.activities.filter(act => {
-            return (act.startDate <= day && day <= act.endDate);
-          }).sort((a,b) => (a.startDate+a.startTime).localeCompare(b.startDate+b.startTime));
+            return act && act.startDate && act.endDate && (act.startDate <= day && day <= act.endDate);
+          }).sort((a,b) => {
+            const aKey = (a.startDate || '') + (a.startTime || '');
+            const bKey = (b.startDate || '') + (b.startTime || '');
+            return aKey.localeCompare(bKey);
+          });
         },
 
         /**
@@ -310,6 +315,17 @@
         },
 
         /**
+         * UUIDを生成する
+         */
+        generateUUID() {
+          return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+            const r = Math.random() * 16 | 0;
+            const v = c == 'x' ? r : (r & 0x3 | 0x8);
+            return v.toString(16);
+          });
+        },
+
+        /**
          * アクティビティを保存
          */
         saveActivity() {
@@ -331,8 +347,8 @@
             const idx = this.activities.findIndex(a => a.id === data.id);
             if (idx !== -1) this.activities[idx] = data;
           } else {
-            // 追加
-            data.id = 'a' + (this.nextId++);
+            // 追加 - UUIDを生成
+            data.id = this.generateUUID();
             this.activities.push(data);
           }
           
@@ -375,8 +391,8 @@
             end = h*60 + m;
           }
           
-          const top = (start/60)*24; // 1h=24px
-          const height = Math.max(16, ((end-start)/60)*24);
+          const top = (start/60)*32; // 1h=32px（48rem÷24時間）
+          const height = Math.max(32, ((end-start)/60)*32); // 最小高さを32pxに設定
           return `top:${top}px;height:${height}px`;
         },
 
