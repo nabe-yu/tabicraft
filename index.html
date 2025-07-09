@@ -18,6 +18,73 @@
 
   <!-- メインコンテンツ -->
   <main class="max-w-7xl mx-auto px-4 py-6">
+    <!-- ローカルストレージ管理 -->
+    <section class="mb-8">
+      <div class="flex items-center justify-between mb-4">
+        <div class="flex items-center gap-3">
+          <button class="text-gray-500 hover:text-gray-700 transition" @click="toggleSavedSchedules" :class="showSavedSchedules ? 'rotate-90' : ''">
+            <span class="text-xl">▶</span>
+          </button>
+          <h2 class="text-lg font-semibold text-gray-700">保存済みスケジュール</h2>
+          <span class="text-sm text-gray-500" x-text="`(${savedSchedules.length}件)`"></span>
+        </div>
+        <div class="flex gap-2">
+          <button class="px-3 py-1.5 bg-white border border-gray-300 text-gray-700 rounded hover:bg-gray-50 hover:border-gray-400 transition text-sm" @click="openSaveModal('new')">
+            ➕ 新規保存
+          </button>
+          <button class="px-3 py-1.5 rounded transition text-sm" 
+                  :class="currentLoadedSchedule ? 'bg-white border border-gray-300 text-gray-700 hover:bg-gray-50 hover:border-gray-400' : 'bg-gray-100 border border-gray-200 text-gray-400 cursor-not-allowed'"
+                  @click="currentLoadedSchedule ? openSaveModal('overwrite') : null"
+                  :title="currentLoadedSchedule ? '現在読み込み中のスケジュールを上書き保存' : '読み込み中のスケジュールがありません'">
+            💾 上書き保存
+          </button>
+        </div>
+      </div>
+      
+      <!-- データ保存に関する説明 -->
+      <div class="bg-gray-50 border border-gray-200 rounded p-3 mb-4">
+        <p class="text-xs text-gray-600">
+          💡 データはブラウザのローカルストレージに保存されます。ブラウザのデータを削除すると保存したスケジュールも失われます。
+        </p>
+      </div>
+      
+      <!-- 保存済みスケジュール一覧（折りたたみ可能） -->
+      <div x-show="showSavedSchedules" x-transition class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
+        <template x-for="schedule in savedSchedules" :key="schedule.id">
+          <div class="bg-white border border-gray-200 rounded hover:border-gray-300 transition p-3 cursor-pointer" 
+               @click="loadSchedule(schedule.id)"
+               title="クリックして読み込み">
+            <div class="flex items-start justify-between mb-2">
+              <div class="flex-1 min-w-0">
+                <h3 class="font-medium text-gray-800 mb-1 truncate" x-text="schedule.name"></h3>
+                <p class="text-xs text-gray-500" x-text="'期間: ' + schedule.startDate + ' 〜 ' + schedule.endDate"></p>
+                <p class="text-xs text-gray-400 mt-0.5" x-text="'アクティビティ: ' + schedule.activities.length + '件'"></p>
+                <template x-if="schedule.description">
+                  <p class="text-xs text-gray-600 mt-1.5 italic truncate" x-text="schedule.description"></p>
+                </template>
+              </div>
+              <button class="text-xs px-1.5 py-0.5 bg-gray-100 text-gray-500 rounded hover:bg-gray-200 hover:text-gray-700 transition ml-2 flex-shrink-0" 
+                      @click.stop="deleteSavedSchedule(schedule.id)"
+                      title="削除">
+                🗑️
+              </button>
+            </div>
+            <div class="text-xs text-gray-400 border-t border-gray-100 pt-2" x-text="'更新: ' + new Date(schedule.updatedAt).toLocaleString('ja-JP')"></div>
+          </div>
+        </template>
+        
+        <!-- 保存済みスケジュールがない場合 -->
+        <template x-if="savedSchedules.length === 0">
+          <div class="col-span-full text-center py-8 text-gray-500">
+            <div class="text-4xl mb-2">📁</div>
+            <p>保存済みのスケジュールがありません</p>
+            <p class="text-sm mt-1">「新規保存」または「上書き保存」ボタンで現在のスケジュールを保存できます</p>
+            <p class="text-xs mt-2 text-gray-400">データはブラウザ内に保存されます</p>
+          </div>
+        </template>
+      </div>
+    </section>
+
     <!-- 開始日選択 -->
     <section class="mb-6">
       <input type="date" class="border rounded px-2 py-1" x-model="startDate" @change="resetDays()">
@@ -93,6 +160,8 @@
       <div class="w-full border rounded p-2 font-mono text-xs h-32 bg-gray-50 overflow-y-auto whitespace-pre-wrap" x-text="generateMarkdown()"></div>
     </section>
 
+
+
     <!-- JSONエディタ -->
     <section class="mt-4">
       <label class="block mb-2 font-semibold">JSON（編集可）</label>
@@ -101,43 +170,43 @@
   </main>
 
   <!-- アクティビティ追加・編集モーダル -->
-  <div x-show="showModal" class="fixed inset-0 bg-black bg-opacity-30 flex items-center justify-center z-50" style="display: none;" @click.self="closeModal">
-    <div class="bg-white rounded-lg shadow-lg p-6 w-80">
+  <div x-show="showModal" class="fixed inset-0 bg-black bg-opacity-20 flex items-center justify-center z-50" style="display: none;" @click.self="closeModal">
+    <div class="bg-white border border-gray-200 rounded-lg shadow-sm p-6 w-80 max-w-[90vw]">
       <form @submit.prevent="saveActivity">
         <!-- タイトル -->
-        <div class="mb-2">
-          <label class="block text-sm">タイトル</label>
-          <input type="text" class="w-full border rounded px-2 py-1" x-model="modalData.title" required>
+        <div class="mb-3">
+          <label class="block text-sm font-medium text-gray-700 mb-1">タイトル</label>
+          <input type="text" class="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:border-gray-400 focus:outline-none" x-model="modalData.title" required>
         </div>
         
         <!-- 開始日時 -->
-        <div class="mb-2 flex gap-2">
+        <div class="mb-3 flex gap-2">
           <div class="flex-1">
-            <label class="block text-sm">開始日</label>
-            <input type="date" class="w-full border rounded px-2 py-1" x-model="modalData.startDate" required>
+            <label class="block text-sm font-medium text-gray-700 mb-1">開始日</label>
+            <input type="date" class="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:border-gray-400 focus:outline-none" x-model="modalData.startDate" required>
           </div>
           <div class="flex-1">
-            <label class="block text-sm">開始時刻</label>
-            <input type="time" class="w-full border rounded px-2 py-1" x-model="modalData.startTime" required>
+            <label class="block text-sm font-medium text-gray-700 mb-1">開始時刻</label>
+            <input type="time" class="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:border-gray-400 focus:outline-none" x-model="modalData.startTime" required>
           </div>
         </div>
         
         <!-- 終了日時 -->
-        <div class="mb-2 flex gap-2">
+        <div class="mb-3 flex gap-2">
           <div class="flex-1">
-            <label class="block text-sm">終了日</label>
-            <input type="date" class="w-full border rounded px-2 py-1" x-model="modalData.endDate" required>
+            <label class="block text-sm font-medium text-gray-700 mb-1">終了日</label>
+            <input type="date" class="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:border-gray-400 focus:outline-none" x-model="modalData.endDate" required>
           </div>
           <div class="flex-1">
-            <label class="block text-sm">終了時刻</label>
-            <input type="time" class="w-full border rounded px-2 py-1" x-model="modalData.endTime" required>
+            <label class="block text-sm font-medium text-gray-700 mb-1">終了時刻</label>
+            <input type="time" class="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:border-gray-400 focus:outline-none" x-model="modalData.endTime" required>
           </div>
         </div>
         
         <!-- カテゴリー -->
         <div class="mb-4">
-          <label class="block text-sm">カテゴリー</label>
-          <select class="w-full border rounded px-2 py-1" x-model="modalData.category" required>
+          <label class="block text-sm font-medium text-gray-700 mb-1">カテゴリー</label>
+          <select class="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:border-gray-400 focus:outline-none" x-model="modalData.category" required>
             <option value="移動">移動</option>
             <option value="宿泊">宿泊</option>
             <option value="食事">食事</option>
@@ -147,11 +216,70 @@
         
         <!-- ボタン群 -->
         <div class="flex justify-between gap-2 mt-4">
-          <button type="button" class="px-3 py-1 bg-gray-300 rounded hover:bg-gray-400" @click="closeModal">キャンセル</button>
+          <button type="button" class="px-3 py-1.5 bg-white border border-gray-300 text-gray-700 rounded hover:bg-gray-50 hover:border-gray-400 transition text-sm" @click="closeModal">キャンセル</button>
           <template x-if="modalEdit">
-            <button type="button" class="px-3 py-1 bg-red-500 text-white rounded hover:bg-red-600" @click="deleteActivity(modalData.id)">削除</button>
+            <button type="button" class="px-3 py-1.5 bg-white border border-red-300 text-red-700 rounded hover:bg-red-50 hover:border-red-400 transition text-sm" @click="deleteActivity(modalData.id)">削除</button>
           </template>
-          <button type="submit" class="px-3 py-1 bg-blue-500 text-white rounded hover:bg-blue-600">保存</button>
+          <button type="submit" class="px-3 py-1.5 bg-white border border-gray-300 text-gray-700 rounded hover:bg-gray-50 hover:border-gray-400 transition text-sm">保存</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- 保存モーダル -->
+  <div x-show="showSaveModal" class="fixed inset-0 bg-black bg-opacity-20 flex items-center justify-center z-50" style="display: none;" @click.self="closeSaveModal">
+    <div class="bg-white border border-gray-200 rounded-lg shadow-sm p-6 w-96 max-w-[90vw]">
+      <h3 class="text-base font-medium text-gray-800 mb-4" x-text="saveModalType === 'new' ? '新規スケジュールを保存' : '既存スケジュールを上書き'"></h3>
+      <form @submit.prevent="saveSchedule">
+        
+        <!-- 新規保存の場合 -->
+        <template x-if="saveModalType === 'new'">
+          <div class="mb-4">
+            <label class="block text-sm font-medium text-gray-700 mb-2">スケジュール名</label>
+            <input type="text" class="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:border-gray-400 focus:outline-none" x-model="saveModalData.name" placeholder="例: 東京旅行" required>
+          </div>
+        </template>
+        
+        <!-- 上書き保存の場合 -->
+        <template x-if="saveModalType === 'overwrite'">
+          <div class="mb-4 space-y-3">
+            <div class="bg-gray-50 border border-gray-200 rounded p-3">
+              <p class="text-sm font-medium text-gray-700 mb-1">現在読み込み中のスケジュール</p>
+              <p class="text-sm text-gray-600" x-text="currentLoadedSchedule ? currentLoadedSchedule.name : '新規スケジュール'"></p>
+            </div>
+            
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-2">開始日を変更</label>
+              <input type="date" class="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:border-gray-400 focus:outline-none" x-model="saveModalData.startDate" :min="currentLoadedSchedule ? currentLoadedSchedule.startDate : startDate">
+              <p class="text-xs text-gray-500 mt-1">変更すると、スケジュール全体の日付が調整されます</p>
+            </div>
+          </div>
+        </template>
+        
+        <div class="mb-4">
+          <label class="block text-sm font-medium text-gray-700 mb-2">説明（任意）</label>
+          <textarea class="w-full border border-gray-300 rounded px-3 py-2 h-20 text-sm focus:border-gray-400 focus:outline-none" x-model="saveModalData.description" placeholder="スケジュールの説明を入力してください"></textarea>
+        </div>
+        
+        <div class="bg-gray-50 border border-gray-200 rounded p-3 mb-4">
+          <p class="text-sm font-medium text-gray-700 mb-2">保存内容のプレビュー:</p>
+          <ul class="text-xs text-gray-600 space-y-1">
+            <li>• 開始日: <span x-text="saveModalType === 'overwrite' ? saveModalData.startDate : startDate"></span></li>
+            <li>• 期間: <span x-text="days.length + '日間'"></span></li>
+            <li>• アクティビティ: <span x-text="activities.length + '件'"></span></li>
+            <template x-if="saveModalType === 'overwrite' && saveModalData.startDate !== startDate">
+              <li class="text-blue-600">• 開始日が <span x-text="startDate"></span> から <span x-text="saveModalData.startDate"></span> に変更されます</li>
+            </template>
+          </ul>
+        </div>
+        
+        <div class="flex justify-end gap-2">
+          <button type="button" class="px-3 py-1.5 bg-white border border-gray-300 text-gray-700 rounded hover:bg-gray-50 hover:border-gray-400 transition text-sm" @click="closeSaveModal">
+            キャンセル
+          </button>
+          <button type="submit" class="px-3 py-1.5 bg-white border border-gray-300 text-gray-700 rounded hover:bg-gray-50 hover:border-gray-400 transition text-sm">
+            <span x-text="saveModalType === 'new' ? '💾 新規保存' : '💾 上書き保存'"></span>
+          </button>
         </div>
       </form>
     </div>
@@ -183,55 +311,225 @@
         modalData: { id: '', title: '', startDate: '', startTime: '', endDate: '', endTime: '', category: '移動' },
         jsonEditor: '',
         nextId: 1,
+        
+        // ローカルストレージ関連
+        savedSchedules: [], // [{id, name, description, startDate, endDate, activities, createdAt, updatedAt}]
+        showSavedSchedules: true, // 折りたたみ状態
+        showSaveModal: false,
+        saveModalType: 'new', // 'new' or 'overwrite'
+        saveModalData: { name: '', description: '', startDate: '' },
+        currentLoadedSchedule: null, // 現在読み込み中のスケジュール
 
         /**
          * 初期化処理
          */
         init() {
-          this.loadFromURL();
+          this.loadSavedSchedules();
           if (this.days.length === 0) {
             this.resetDays();
           } else {
             this.updateEditor();
-            this.saveToURL();
+          }
+        },
+
+
+
+        /**
+         * ローカルストレージから保存済みスケジュールを読み込み
+         */
+        loadSavedSchedules() {
+          try {
+            const saved = localStorage.getItem('tabicraft_schedules');
+            this.savedSchedules = saved ? JSON.parse(saved) : [];
+          } catch (e) {
+            console.warn('保存済みスケジュールの読み込みに失敗しました:', e);
+            this.savedSchedules = [];
           }
         },
 
         /**
-         * URLからデータを読み込み
+         * ローカルストレージに保存済みスケジュールを保存
          */
-        loadFromURL() {
-          const urlParams = new URLSearchParams(window.location.search);
-          const dataParam = urlParams.get('data');
-          if (dataParam) {
-            try {
-              const jsonStr = decodeURIComponent(atob(dataParam));
-              const data = JSON.parse(jsonStr);
-              this.startDate = data.startDate || this.startDate;
-              this.days = data.days || [];
-              this.activities = data.activities || [];
-              this.nextId = data.nextId || 1;
-            } catch (e) {
-              console.warn('URLからのデータ読み込みに失敗しました:', e);
+        saveSchedulesToStorage() {
+          try {
+            localStorage.setItem('tabicraft_schedules', JSON.stringify(this.savedSchedules));
+          } catch (e) {
+            console.warn('スケジュールの保存に失敗しました:', e);
+            alert('スケジュールの保存に失敗しました。ブラウザのストレージ容量を確認してください。');
+          }
+        },
+
+        /**
+         * 日付を指定日数分調整する
+         */
+        adjustDate(dateString, daysDiff) {
+          const date = new Date(dateString);
+          date.setDate(date.getDate() + daysDiff);
+          return date.toISOString().slice(0, 10);
+        },
+
+        /**
+         * 保存済みスケジュールの折りたたみ切り替え
+         */
+        toggleSavedSchedules() {
+          this.showSavedSchedules = !this.showSavedSchedules;
+        },
+
+        /**
+         * 保存モーダルを開く
+         */
+        openSaveModal(type) {
+          this.saveModalType = type;
+          this.saveModalData = { name: '', description: '', startDate: this.startDate };
+          
+          // 上書き保存の場合、現在読み込み中のスケジュールがない場合は新規保存に変更
+          if (type === 'overwrite' && !this.currentLoadedSchedule) {
+            this.saveModalType = 'new';
+          }
+          
+          this.showSaveModal = true;
+        },
+
+        /**
+         * 保存モーダルを閉じる
+         */
+        closeSaveModal() {
+          this.showSaveModal = false;
+        },
+
+        /**
+         * スケジュールを保存
+         */
+        saveSchedule() {
+          if (this.saveModalType === 'new') {
+            // 新規保存
+            if (!this.saveModalData.name.trim()) {
+              alert('スケジュール名を入力してください');
+              return;
             }
+
+            const schedule = {
+              id: this.generateUUID(),
+              name: this.saveModalData.name.trim(),
+              description: this.saveModalData.description.trim(),
+              startDate: this.startDate,
+              endDate: this.days[this.days.length - 1],
+              activities: [...this.activities],
+              createdAt: new Date().toISOString(),
+              updatedAt: new Date().toISOString()
+            };
+
+            this.savedSchedules.push(schedule);
+            this.saveSchedulesToStorage();
+            this.closeSaveModal();
+            
+            // 成功メッセージ
+            const successMsg = document.createElement('div');
+            successMsg.className = 'fixed top-4 right-4 bg-white border border-green-200 text-green-700 px-3 py-2 rounded shadow-sm z-50 text-sm';
+            successMsg.textContent = '✅ 新規スケジュールを保存しました';
+            document.body.appendChild(successMsg);
+            setTimeout(() => successMsg.remove(), 3000);
+          } else {
+            // 上書き保存
+            if (!this.currentLoadedSchedule) {
+              alert('上書きするスケジュールが見つかりません');
+              return;
+            }
+
+            const existingIndex = this.savedSchedules.findIndex(s => s.id === this.currentLoadedSchedule.id);
+            if (existingIndex === -1) {
+              alert('現在読み込み中のスケジュールが見つかりません');
+              return;
+            }
+
+            const existingSchedule = this.savedSchedules[existingIndex];
+            
+            // 開始日が変更された場合、アクティビティの日付を調整
+            let adjustedActivities = [...this.activities];
+            if (this.saveModalData.startDate !== this.startDate) {
+              const dateDiff = new Date(this.saveModalData.startDate) - new Date(this.startDate);
+              const daysDiff = Math.round(dateDiff / (1000 * 60 * 60 * 24));
+              
+              adjustedActivities = this.activities.map(activity => ({
+                ...activity,
+                startDate: this.adjustDate(activity.startDate, daysDiff),
+                endDate: this.adjustDate(activity.endDate, daysDiff)
+              }));
+            }
+
+            const updatedSchedule = {
+              ...existingSchedule,
+              description: this.saveModalData.description.trim(),
+              startDate: this.saveModalData.startDate,
+              endDate: this.adjustDate(this.days[this.days.length - 1], 
+                new Date(this.saveModalData.startDate) - new Date(this.startDate)),
+              activities: adjustedActivities,
+              updatedAt: new Date().toISOString()
+            };
+
+            this.savedSchedules[existingIndex] = updatedSchedule;
+            this.saveSchedulesToStorage();
+            this.closeSaveModal();
+            
+            // 成功メッセージ
+            const successMsg = document.createElement('div');
+            successMsg.className = 'fixed top-4 right-4 bg-white border border-blue-200 text-blue-700 px-3 py-2 rounded shadow-sm z-50 text-sm';
+            successMsg.textContent = `✅ 「${existingSchedule.name}」を上書き保存しました`;
+            document.body.appendChild(successMsg);
+            setTimeout(() => successMsg.remove(), 3000);
           }
         },
 
         /**
-         * URLにデータを保存
+         * 保存済みスケジュールを読み込み
          */
-        saveToURL() {
-          const data = {
-            startDate: this.startDate,
-            days: this.days,
-            activities: this.activities,
-            nextId: this.nextId
-          };
-          const jsonStr = JSON.stringify(data);
-          const base64Data = btoa(encodeURIComponent(jsonStr));
-          const url = new URL(window.location);
-          url.searchParams.set('data', base64Data);
-          window.history.replaceState({}, '', url);
+        loadSchedule(scheduleId) {
+          const schedule = this.savedSchedules.find(s => s.id === scheduleId);
+          if (!schedule) {
+            alert('スケジュールが見つかりません');
+            return;
+          }
+
+          this.startDate = schedule.startDate;
+          this.days = [];
+          
+          // 日付範囲を再構築
+          const start = new Date(schedule.startDate);
+          const end = new Date(schedule.endDate);
+          for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
+            this.days.push(d.toISOString().slice(0, 10));
+          }
+          
+          this.activities = [...schedule.activities];
+          this.currentLoadedSchedule = schedule; // 現在読み込み中のスケジュールを記録
+          this.updateEditor();
+          
+          // 成功メッセージ
+          const successMsg = document.createElement('div');
+          successMsg.className = 'fixed top-4 right-4 bg-white border border-blue-200 text-blue-700 px-3 py-2 rounded shadow-sm z-50 text-sm';
+          successMsg.textContent = `📂 「${schedule.name}」を読み込みました`;
+          document.body.appendChild(successMsg);
+          setTimeout(() => successMsg.remove(), 3000);
+        },
+
+        /**
+         * 保存済みスケジュールを削除
+         */
+        deleteSavedSchedule(scheduleId) {
+          const schedule = this.savedSchedules.find(s => s.id === scheduleId);
+          if (!schedule) return;
+
+          if (confirm(`「${schedule.name}」を削除しますか？\nこの操作は元に戻せません。`)) {
+            this.savedSchedules = this.savedSchedules.filter(s => s.id !== scheduleId);
+            this.saveSchedulesToStorage();
+            
+            // 成功メッセージ
+            const successMsg = document.createElement('div');
+            successMsg.className = 'fixed top-4 right-4 bg-white border border-red-200 text-red-700 px-3 py-2 rounded shadow-sm z-50 text-sm';
+            successMsg.textContent = `🗑️ 「${schedule.name}」を削除しました`;
+            document.body.appendChild(successMsg);
+            setTimeout(() => successMsg.remove(), 3000);
+          }
         },
 
         /**
@@ -240,8 +538,8 @@
         resetDays() {
           this.days = [this.startDate];
           this.activities = [];
+          this.currentLoadedSchedule = null; // 新規スケジュールになったのでクリア
           this.updateEditor();
-          this.saveToURL();
         },
 
         /**
@@ -254,7 +552,6 @@
           const nextStr = next.toISOString().slice(0,10);
           this.days.push(nextStr);
           this.updateEditor();
-          this.saveToURL();
         },
 
         /**
@@ -263,7 +560,6 @@
         removeDay(idx) {
           this.days.splice(idx,1);
           this.updateEditor();
-          this.saveToURL();
         },
 
         /**
@@ -354,7 +650,6 @@
           
           this.showModal = false;
           this.updateEditor();
-          this.saveToURL();
         },
 
         /**
@@ -365,7 +660,6 @@
             this.activities = this.activities.filter(a => a.id !== id);
             this.showModal = false;
             this.updateEditor();
-            this.saveToURL();
           }
         },
 
@@ -428,7 +722,6 @@
             this.startDate = data.startDate;
             this.days = data.days;
             this.activities = data.activities;
-            this.saveToURL();
           } catch (e) {
             console.warn('JSONパースエラー:', e);
           }
