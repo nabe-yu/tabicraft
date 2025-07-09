@@ -32,7 +32,7 @@
             <span class="text-xs font-medium text-gray-700">時刻</span>
           </div>
           <template x-for="hour in 24" :key="hour">
-            <div class="h-6 border-b border-gray-100 text-xs text-gray-400 px-1 flex items-center justify-center" x-text="String(hour-1).padStart(2, '0') + ':00'"></div>
+            <div class="h-8 border-b border-gray-100 text-xs text-gray-400 px-1 flex items-center justify-center" x-text="String(hour-1).padStart(2, '0') + ':00'"></div>
           </template>
         </div>
         
